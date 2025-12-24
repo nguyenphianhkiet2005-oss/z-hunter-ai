@@ -2,90 +2,98 @@ import streamlit as st
 import google.generativeai as genai
 from duckduckgo_search import DDGS
 
-# 1. CẤU HÌNH GIAO DIỆN (UI)
-st.set_page_config(page_title="Z-Hunter AI", page_icon="⚡", layout="centered")
+# 1. CẤU HÌNH GIAO DIỆN HỌC TẬP
+st.set_page_config(page_title="Z-Tutor AI", page_icon="🎓", layout="wide")
 
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; color: #f0f2f6; }
-    h1 { color: #00ff41; text-shadow: 0 0 10px #00ff41; }
-    .stStatusWidget { border-radius: 15px; border: 1px solid #00ff41; }
+    .main { background-color: #f0f2f6; }
+    .stButton>button { background-color: #4CAF50; color: white; border-radius: 10px; }
+    .stTextInput>div>div>input { border: 2px solid #4CAF50; }
+    h1 { color: #2E7D32; font-family: 'Segoe UI', sans-serif; }
+    .study-card { background: white; padding: 20px; border-radius: 15px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚡ Z-Hunter AI")
-st.write("### Trợ lý săn deal chuyên nghiệp")
+st.title("🎓 Z-Tutor AI: Gia Sư 4.0")
+st.write("### Hướng dẫn chi tiết • Giải bài tập • Lộ trình học tập")
 
 # 2. LẤY API KEY TỪ SECRETS HOẶC SIDEBAR
 api_key = st.secrets.get("GEMINI_API_KEY") or st.sidebar.text_input("🔑 Nhập Gemini API Key:", type="password")
 
-# 3. HÀM TÌM KIẾM DỮ LIỆU THỰC TẾ
-def search_product(query):
+# 3. HÀM TÌM TÀI LIỆU THAM KHẢO (Hình ảnh, Video, Link)
+def search_learning_resources(query):
     try:
         with DDGS() as ddgs:
-            results = ddgs.text(f"{query} giá bao nhiêu shopee lazada tiktokvn", max_results=3)
-            return results
+            # Tìm kiếm video và link học tập
+            video_results = ddgs.text(f"video bài giảng {query} youtube", max_results=2)
+            doc_results = ddgs.text(f"tài liệu học tập {query} pdf wiki", max_results=2)
+            return video_results + doc_results
     except:
         return []
 
-# 4. HÀM TỰ ĐỘNG CHỌN MODEL PHÙ HỢP
+# 4. HÀM TỰ ĐỘNG CHỌN MODEL
 def get_working_model(api_key):
-    genai.configure(api_key=api_key)
-    # Danh sách ưu tiên các model từ mạnh đến nhẹ
-    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-pro']
-    
     try:
-        # Lấy danh sách thực tế mà tài khoản của bạn được phép dùng
+        genai.configure(api_key=api_key)
+        candidate_models = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-pro']
         available = [m.name.split('/')[-1] for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # Chọn model đầu tiên có trong danh sách khả dụng của bạn
-        for model_name in candidate_models:
-            if model_name in available:
-                return genai.GenerativeModel(model_name)
-        
-        # Nếu không khớp tên nào, lấy cái đầu tiên trong danh sách khả dụng
+        for name in candidate_models:
+            if name in available: return genai.GenerativeModel(name)
         return genai.GenerativeModel(available[0])
-    except Exception as e:
-        st.error(f"Lỗi khi kiểm tra Model: {e}")
-        return None
+    except: return None
 
-# 5. CHƯƠNG TRÌNH CHÍNH
+# 5. GIAO DIỆN CHÍNH
 if api_key:
     model = get_working_model(api_key)
     
+    # Thanh bên trái cho các chức năng nhanh
+    with st.sidebar:
+        st.header("📌 Công cụ học tập")
+        mode = st.radio("Chọn chế độ:", ["Giải bài tập chi tiết", "Lập thời khóa biểu", "Tìm tài liệu tham khảo"])
+        st.info("Mẹo: Bạn có thể dán đề toán hoặc yêu cầu lập lịch học 7 ngày vào đây.")
+
     if model:
-        prompt = st.chat_input("Dán link hoặc tên món hàng...")
+        # Nhập yêu cầu từ học sinh
+        user_input = st.chat_input("Nhập bài tập hoặc môn học bạn cần hỗ trợ...")
         
-        if prompt:
+        if user_input:
             with st.chat_message("user"):
-                st.markdown(prompt)
+                st.markdown(user_input)
                 
-            with st.status("🚀 Đang check giá thị trường...", expanded=True) as status:
-                st.write("🔍 Đang lướt web tìm kèo...")
-                real_data = search_product(prompt)
+            with st.status("🧠 Gia sư AI đang suy nghĩ...", expanded=True) as status:
+                # Tìm tài liệu bổ trợ
+                st.write("📚 Đang tìm video và tài liệu liên quan...")
+                resources = search_learning_resources(user_input)
                 
-                st.write(f"🧠 AI đang phân tích bằng {model.model_name}...")
-                context = f"Dữ liệu thực tế: {real_data}"
-                full_prompt = (
-                    f"Bạn là Z-Hunter, chuyên gia săn deal. Dựa vào dữ liệu: {context}, "
-                    f"hãy tư vấn về: '{prompt}'. Dùng ngôn ngữ Gen Z cháy, tư vấn ngắn gọn."
-                )
+                # Tạo nội dung hướng dẫn
+                st.write("✍️ Đang soạn bài giảng chi tiết...")
+                prompt = f"""
+                Bạn là Z-Tutor, một gia sư tận tâm và thông thái. 
+                Nhiệm vụ: {mode} cho câu hỏi: '{user_input}'.
+                Yêu cầu:
+                1. Nếu là giải bài: Hãy giải từng bước một (step-by-step), giải thích lý thuyết tại sao lại làm vậy.
+                2. Nếu là thời khóa biểu: Hãy lập lịch học khoa học, có thời gian nghỉ ngơi (Pomodoro).
+                3. Giọng văn: Thân thiện, khuyến khích học sinh.
+                4. Sử dụng Markdown để trình bày đẹp mắt (in đậm, bảng, danh sách).
+                """
                 
-                try:
-                    response = model.generate_content(full_prompt)
-                    status.update(label="✅ Đã tìm thấy kèo!", state="complete", expanded=False)
-                    
-                    with st.chat_message("assistant"):
-                        st.markdown(response.text)
-                    
-                    if real_data:
-                        with st.expander("🔗 Xem nguồn tham khảo"):
-                            for res in real_data:
-                                st.write(f"- [{res['title']}]({res['href']})")
-                except Exception as e:
-                    st.error(f"AI không phản hồi: {e}")
+                response = model.generate_content(prompt)
+                status.update(label="✅ Đã hoàn thành bài giảng!", state="complete", expanded=False)
+            
+            # Hiển thị kết quả
+            with st.chat_message("assistant"):
+                st.markdown(response.text)
+                
+                if resources:
+                    st.markdown("---")
+                    st.subheader("🔗 Tài liệu tham khảo bổ trợ (Video & Link):")
+                    for res in resources:
+                        st.write(f"- [{res['title']}]({res['href']})")
+    else:
+        st.error("API Key không hợp lệ hoặc không có quyền truy cập Gemini.")
 else:
-    st.info("👈 Hãy dán API Key vào thanh bên trái hoặc cài đặt trong Secrets để bắt đầu!")
+    st.info("👈 Hãy đảm bảo bạn đã nhập API Key ở Secrets hoặc Sidebar để gặp Gia sư AI!")
 
 st.markdown("---")
-st.caption("Z-Hunter AI v2.1 • Cập nhật tự động Model")
+st.caption("Z-Tutor AI v3.0 • Giúp bạn học tập thông minh hơn mỗi ngày")
