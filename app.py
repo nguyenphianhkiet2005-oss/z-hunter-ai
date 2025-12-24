@@ -45,7 +45,7 @@ if api_key:
     try:
         genai.configure(api_key=api_key)
         # Sử dụng bản flash-latest để ổn định nhất trên Cloud
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # Nhận câu hỏi từ người dùng
         prompt = st.chat_input("Dán link hoặc tên món hàng muốn săn...")
