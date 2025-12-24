@@ -3,90 +3,89 @@ import google.generativeai as genai
 from duckduckgo_search import DDGS
 
 # 1. CẤU HÌNH GIAO DIỆN (UI)
-st.set_page_config(page_title="Z-Hunter AI v2", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Z-Hunter AI", page_icon="⚡", layout="centered")
 
-# CSS tạo phong cách Neon Gen Z
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: #f0f2f6; }
-    .stChatInput { bottom: 20px; }
-    .stStatusWidget { border-radius: 15px; border: 1px solid #00ff41; }
     h1 { color: #00ff41; text-shadow: 0 0 10px #00ff41; }
+    .stStatusWidget { border-radius: 15px; border: 1px solid #00ff41; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("⚡ Z-Hunter AI")
-st.write("### Trợ lý săn deal xuyên lục địa")
+st.write("### Trợ lý săn deal chuyên nghiệp")
 
-# 2. KIỂM TRA API KEY (Ưu tiên lấy từ Secrets)
-api_key = None
+# 2. LẤY API KEY TỪ SECRETS HOẶC SIDEBAR
+api_key = st.secrets.get("GEMINI_API_KEY") or st.sidebar.text_input("🔑 Nhập Gemini API Key:", type="password")
 
-if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
-else:
-    # Nếu chưa cài Secrets thì hiện ô nhập ở sidebar để bạn dùng tạm/test
-    api_key = st.sidebar.text_input("🔑 Nhập Gemini API Key để kích hoạt:", type="password")
-    st.sidebar.info("Mẹo: Hãy cài API Key vào phần 'Secrets' trên Streamlit Cloud để dùng vĩnh viễn.")
-
-# 3. HÀM TÌM KIẾM THÔNG TIN THỰC TẾ
+# 3. HÀM TÌM KIẾM DỮ LIỆU THỰC TẾ
 def search_product(query):
     try:
         with DDGS() as ddgs:
-            # Tìm kiếm trên các sàn TMĐT phổ biến tại Việt Nam
-            search_query = f"{query} giá bao nhiêu shopee lazada tiktok"
-            results = ddgs.text(search_query, max_results=3)
+            results = ddgs.text(f"{query} giá bao nhiêu shopee lazada tiktokvn", max_results=3)
             return results
-    except Exception as e:
-        st.error(f"Lỗi tìm kiếm: {e}")
+    except:
         return []
 
-# 4. CHƯƠNG TRÌNH CHÍNH
-if api_key:
+# 4. HÀM TỰ ĐỘNG CHỌN MODEL PHÙ HỢP
+def get_working_model(api_key):
+    genai.configure(api_key=api_key)
+    # Danh sách ưu tiên các model từ mạnh đến nhẹ
+    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-pro']
+    
     try:
-        genai.configure(api_key=api_key)
-        # Sử dụng bản flash-latest để ổn định nhất trên Cloud
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Lấy danh sách thực tế mà tài khoản của bạn được phép dùng
+        available = [m.name.split('/')[-1] for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
-        # Nhận câu hỏi từ người dùng
-        prompt = st.chat_input("Dán link hoặc tên món hàng muốn săn...")
+        # Chọn model đầu tiên có trong danh sách khả dụng của bạn
+        for model_name in candidate_models:
+            if model_name in available:
+                return genai.GenerativeModel(model_name)
+        
+        # Nếu không khớp tên nào, lấy cái đầu tiên trong danh sách khả dụng
+        return genai.GenerativeModel(available[0])
+    except Exception as e:
+        st.error(f"Lỗi khi kiểm tra Model: {e}")
+        return None
+
+# 5. CHƯƠNG TRÌNH CHÍNH
+if api_key:
+    model = get_working_model(api_key)
+    
+    if model:
+        prompt = st.chat_input("Dán link hoặc tên món hàng...")
         
         if prompt:
             with st.chat_message("user"):
                 st.markdown(prompt)
                 
             with st.status("🚀 Đang check giá thị trường...", expanded=True) as status:
-                # Bước 1: Tìm dữ liệu thật
-                st.write("🔍 Đang lướt Shopee, Lazada, TikTok...")
+                st.write("🔍 Đang lướt web tìm kèo...")
                 real_data = search_product(prompt)
                 
-                # Bước 2: AI phân tích
-                st.write("🧠 AI đang phân tích kèo thơm...")
-                context = f"Dữ liệu thực tế vừa tìm được: {real_data}"
+                st.write(f"🧠 AI đang phân tích bằng {model.model_name}...")
+                context = f"Dữ liệu thực tế: {real_data}"
                 full_prompt = (
-                    f"Bạn là Z-Hunter, một chuyên gia săn deal cực khét cho Gen Z. "
-                    f"Dựa vào dữ liệu này: {context}, hãy tư vấn về món hàng: '{prompt}'. "
-                    f"Yêu cầu: Trả lời ngắn gọn, dùng ngôn ngữ Gen Z (vibe cháy, dùng từ như 'kèo thơm', 'múc ngay', 'đỉnh nóc kịch trần'). "
-                    f"Nếu thấy giá tốt hãy khuyên dùng, nếu thấy lừa đảo hãy cảnh báo."
+                    f"Bạn là Z-Hunter, chuyên gia săn deal. Dựa vào dữ liệu: {context}, "
+                    f"hãy tư vấn về: '{prompt}'. Dùng ngôn ngữ Gen Z cháy, tư vấn ngắn gọn."
                 )
                 
-                response = model.generate_content(full_prompt)
-                status.update(label="✅ Đã tìm thấy kèo ngon!", state="complete", expanded=False)
-            
-            # Hiển thị câu trả lời của AI
-            with st.chat_message("assistant"):
-                st.markdown(response.text)
-            
-            # Hiển thị các link tham khảo
-            if real_data:
-                with st.expander("🔗 Xem các nguồn săn hàng AI tìm thấy"):
-                    for res in real_data:
-                        st.write(f"- [{res['title']}]({res['href']})")
-                        
-    except Exception as e:
-        st.error(f"Lỗi AI: {e}")
+                try:
+                    response = model.generate_content(full_prompt)
+                    status.update(label="✅ Đã tìm thấy kèo!", state="complete", expanded=False)
+                    
+                    with st.chat_message("assistant"):
+                        st.markdown(response.text)
+                    
+                    if real_data:
+                        with st.expander("🔗 Xem nguồn tham khảo"):
+                            for res in real_data:
+                                st.write(f"- [{res['title']}]({res['href']})")
+                except Exception as e:
+                    st.error(f"AI không phản hồi: {e}")
 else:
-    st.warning("⚠️ Chào bạn! App chưa được cài đặt 'Chìa khóa' (API Key). Hãy nhập vào sidebar bên trái hoặc cài trong Secrets nhé.")
+    st.info("👈 Hãy dán API Key vào thanh bên trái hoặc cài đặt trong Secrets để bắt đầu!")
 
-# 5. HƯỚNG DẪN DƯỚI CHÂN TRANG
 st.markdown("---")
-st.caption("Build by Gemini 3 Flash • Dữ liệu cập nhật thời gian thực")
+st.caption("Z-Hunter AI v2.1 • Cập nhật tự động Model")
